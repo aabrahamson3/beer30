@@ -1,1 +1,0 @@
-#  this directory store data uses for my project
