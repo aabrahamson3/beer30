@@ -170,6 +170,28 @@ def precision_recall_at_k(predictions, k=10, threshold=3.5):
 
     return precisions, recalls
 
+def recommendations(beer_id, cos_sim = cos_sim):
+    """
+    Takes a beer id and cosine similarty matrix in as arguments and returns beers closely related to the input beer
+    """
+    # initializing the empty list of recommended movies
+    recommended_beers = []
+    
+    # gettin the index of the movie that matches the title
+    idx = indices[indices == beer_id].index[0]
+    print(idx)
+    # creating a Series with the similarity scores in descending order
+    score_series = pd.Series(cos_sim[idx]).sort_values(ascending = False)
+
+    # getting the indexes of the 10 most similar movies
+    top_10_indexes = list(score_series.iloc[1:11].index)
+    print(top_10_indexes)
+    # populating the list with the titles of the best 10 matching movies
+    for i in top_10_indexes:
+        recommended_beers.append(list(beers_text.name)[i])
+        
+    return recommended_beers
+
 def tfidf_recs(beer_id, beer_df, cos_sim):
     """
     Takes a beer id and cosine similarty matrix in as arguments and returns beers 
@@ -259,3 +281,76 @@ def preprocess_reviews(reviews, beers):
     df_with_mins = df.merge(reviewers_sub, how = 'inner', on = 'username')
 
     return df_with_mins
+
+def get_user_pred_set(user_rating_list, rating_df):
+    """returns a list of beer id's to be predicted. excludes beers the users imputed
+    user_rating_list: is a list of dictionaries produced when the user provides
+                      initial ratings
+    rating_df: is a df of all ratings subseted to the columns needed for SVD"""
+    
+    user_ratings_ids = []
+    for rating in user_rating_list:
+        user_ratings_ids.append(rating['id'])
+    beers_for_pred = []
+    for beer_id in rating_df['id']:
+        if beer_id not in user_ratings_ids:
+            beers_for_pred.append(str(beer_id))
+    return set(beers_for_pred)
+
+def svd_location_filter(user_pred_list, lookup_dict, state, city, n):
+    """ 
+    takes in list from get_user_pred_list and filters list down to only the location they
+    provided, returns a dictionary with the beer id as key, and beer_name and brewery_name
+    as values
+    """
+    located_beer = {}
+    counter = 0
+
+    for beer in user_pred_list:
+#         print(beer)
+        if counter < n:
+            dict_state = lookup_dict[beer]['state']
+            dict_city = lookup_dict[beer]['city']
+            brewery_id = lookup_dict[beer]['brewery_id']
+            brewery_name = lookup_dict[beer]['brewery_name']
+            beer_name = lookup_dict[beer]['name']
+            if (dict_state == state) and (dict_city == city):
+        #             print(beer_breweries_lookup[beer[0]])
+                if brewery_id in located_beer:
+                    continue
+                else:  
+                    located_beer[beer] = (beer_name,brewery_name)
+                counter += 1
+    return located_beer
+
+def sort_score(val):
+    """used to sort predictions by their estimated score"""
+    return val[1]
+
+def pred_for_user_location(to_predict_list, username, model):
+    """Takes in a list of beer ID's (that have been filtered by location) to be predicted for 
+    the given user. Also takes the trained model as an argument"""
+    predictions = []
+    for iid in to_predict_list:
+        pred = model.predict(username, int(iid), verbose = False)
+        predictions.append((pred[1],pred[3]))
+    predictions.sort(key = sort_score, reverse = True)
+    return predictions
+
+def return_top_breweries(top_beers, svd_loc_filter_output, n):
+    
+    counter = 0
+    top_breweries = {}
+    for beer in top_beers:
+        if counter < n:
+            beer_name = svd_loc_filter_output[str(beer[0])][0]
+            brewery_name = svd_loc_filter_output[str(beer[0])][1]
+            if brewery_name in top_breweries:
+                continue
+            else:
+                top_breweries[brewery_name] = (brewery_name, beer_name)
+#             top_breweries.append(svd_loc_filter_output[str(beer[0])])
+            
+            
+            counter+=1
+    return top_breweries
