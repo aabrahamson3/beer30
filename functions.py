@@ -30,36 +30,37 @@ def tag_docs(docs):
     results = docs.apply(lambda r: TaggedDocument(words=preprocessor(r['text']), tags=[r['id']]), axis=1)
     return results.tolist()
 
+
+def stem_tag_docs(docs, my_stop_words):
+    ls = LancasterStemmer()
+    results = docs.apply(lambda r: TaggedDocument(words=preprocessor_and_stem(r['text'], my_stop_words), tags=[str(r['id'])]), axis=1)
+    return results.tolist()
+
 def preprocessor(text):
     """uses gensim simple_preprocess and then removes stop words
     -> used in the tag_docs function
     """
-    # Uses both sklearn and gensim stop words, and custom additions
-    letters = list('abcdefghijklmnopqrstuvwxyz')
-    numbers = list('0123456789')
-    words = ['oz', 'ml', 'pour', 'poured', 'bottle', 'can', 'ounce',\
-         'bomber', 'botttle', 'stubby', 'ouncer', 'pouring', 'growler', 'snifter',\
-         'tulip', 'bottled', 'brewery'] # ADD MORE
-    stop_words = stop_words.union(set(letters)).union(set(numbers)).union(set(words))
-    my_stop_words = text.ENGLISH_STOP_WORDS.union(stop_words)
-    
     # uses gensim simple_preprocess to lowercase and tokenize words, and then removes custom stop words
     simple = simple_preprocess(text)
     result = [word for word in simple if not word in my_stop_words]
     return result
 
-def preprocessor_and_stem(text):
-    """uses gensim simple_preprocess and then removes stop words
-    -> used in the tag_docs function
-    """
-     # Uses both sklearn and gensim stop words, and custom additions
+def make_stop_words():
+    global stop_words
     letters = list('abcdefghijklmnopqrstuvwxyz')
     numbers = list('0123456789')
     words = ['oz', 'ml', 'pour', 'poured', 'bottle', 'can', 'ounce',\
          'bomber', 'botttle', 'stubby', 'ouncer', 'pouring', 'growler', 'snifter',\
-         'tulip', 'bottled', 'brewery'] # ADD MORE
-    stop_words = stop_words.union(set(letters)).union(set(numbers)).union(set(words))
-    my_stop_words = text.ENGLISH_STOP_WORDS.union(stop_words)
+         'tulip', 'bottled', 'brewery', 'pint', 'glass', 'cap', 'cork']
+    stopwords = stop_words.union(set(letters)).union(set(numbers)).union(set(words))
+    
+    my_stop_words = text.ENGLISH_STOP_WORDS.union(stopwords)
+    return my_stop_words
+
+def preprocessor_and_stem(text, my_stop_words):
+    """uses gensim simple_preprocess and then removes stop words
+    -> used in the tag_docs function
+    """
     # Instantiate a LancasterStemmer object, use gensim simple_preprocess to tokenize/lowercase
     # and then removes stop words
     ls = LancasterStemmer()
@@ -113,6 +114,76 @@ def location_filter(ranked_beers, lookup_dict, state, city, n):
                 counter += 1
     return located_brewery
 
+def location_filter2(ranked_beers, lookup_dict, state, city, n):
+    """ 
+    This takes a list of tuples where the 1st element is a beer_id. It searches through the lookup dictionary
+    to match breweries based upon their location. And returns n number of recommendations
+
+    It returns the beer_id as key, and brewery_name, beer id, and beer name as values
+    """
+    located_brewery = {}
+    # state = 'CA'
+    # city = 'Los Angeles'
+    counter = 0
+
+    for beer in ranked_beers:
+        if counter < n:
+            dict_state = lookup_dict[beer[0]]['state']
+            dict_city = lookup_dict[beer[0]]['city']
+            brewery_id = lookup_dict[beer[0]]['brewery_id']
+            brewery_name = lookup_dict[beer[0]]['brewery_name']
+            beer_name = lookup_dict[beer[0]]['name']
+            if (len(state) > 0) and (len(city)>0):
+                if (dict_state == state) and (dict_city == city):
+            #             print(beer_breweries_lookup[beer[0]])
+                    if brewery_id in located_brewery:
+                        continue
+                    else:  
+                        located_brewery[brewery_id] = (brewery_name, beer[0], beer_name)
+                
+                    counter += 1
+            # ignores state field
+            elif len(state) == 0:
+                if (dict_city == city):        
+                    if brewery_id in located_brewery:
+                        continue
+                    else:  
+                        located_brewery[brewery_id] = (brewery_name, beer[0], beer_name)
+                
+                    counter += 1
+
+            elif len(city) == 0:        
+                if (dict_state == state):
+                    if brewery_id in located_brewery:
+                        continue
+                    else:  
+                        located_brewery[brewery_id] = (brewery_name, beer[0], beer_name)
+                
+                    counter += 1
+    if len(located_brewery) > 0:
+        return located_brewery
+    else:
+        return 
+
+def beer2beer(state, city, model, kw_or_beer):
+    kw_or_beer = kw_or_beer.title()
+    for i in lookup_dict:
+        if lookup_dict[i]['name'] == kw_or_beer:
+            recs = model.docvecs.most_similar(str(i), topn=10000)
+            return location_filter2(recs, lookup_dict, state, city, 3)
+
+
+def get_recs_from_wordvec(state, city, keyword, n_recs=3, topn=8000, stem=True):
+"""takes in a word vec and returns top breweries from the provided location"""
+    if stem == True:
+        ls = LancasterStemmer()
+        model = load_alt_model()
+        try:
+            vec = model[ls.stem(keyword)]
+            tags = model.docvecs.most_similar([vec], topn=topn)
+            return location_filter2(tags, lookup_dict, state, city, n_recs)
+        except KeyError:
+            return
 
 def user_recs(algo, reviews_df, uid):
     """
@@ -170,7 +241,7 @@ def precision_recall_at_k(predictions, k=10, threshold=3.5):
 
     return precisions, recalls
 
-def recommendations(beer_id, cos_sim = cos_sim):
+def recommendations(beer_id, cos_sim):
     """
     Takes a beer id and cosine similarty matrix in as arguments and returns beers closely related to the input beer
     """
