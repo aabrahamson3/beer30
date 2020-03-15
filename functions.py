@@ -174,7 +174,10 @@ def beer2beer(state, city, model, kw_or_beer):
 
 
 def get_recs_from_wordvec(state, city, keyword, n_recs=3, topn=8000, stem=True):
-"""takes in a word vec and returns top breweries from the provided location"""
+    """
+    takes in a word vec and returns top breweries from the provided location
+
+    """
     if stem == True:
         ls = LancasterStemmer()
         model = load_alt_model()
