@@ -15,6 +15,19 @@ from sklearn.feature_extraction import text
 from nltk.stem.lancaster import LancasterStemmer
 from gensim.models.callbacks import CallbackAny2Vec
 
+
+def make_tsne_subset(tsne_df: pd.DataFrame, beer_df: pd.DataFrame, style: str) -> pd.DataFrame:
+    """
+    Takes a dataframe of a fit/transformed t-SNE object. Beer ID/Doc Tags are the index.
+    Second argument is a string that is the style of beer (as per stated style in the beers dataset)
+    Returns a Pandas Dataframe with t-SNE coordinates of that specific style, allowing you to show clustering
+    """
+    subset = beer_df.loc[beer_df['style'] == style]
+    subset_set = set(subset['id'])
+    match = set(tsne_df.index).intersection(subset_set)
+    style_subset = tsne_df[tsne_df.index.isin(match)]
+    return style_subset
+
 def read_pickle_create_lookup(filepath):
     """this takes in the joined_text_df pickle file to create a lookup dict for the model"""
     df_joined = pd.read_pickle(filepath)
@@ -174,7 +187,10 @@ def beer2beer(state, city, model, kw_or_beer):
 
 
 def get_recs_from_wordvec(state, city, keyword, n_recs=3, topn=8000, stem=True):
-"""takes in a word vec and returns top breweries from the provided location"""
+    """
+    takes in a word vec and returns top breweries from the provided location
+
+    """
     if stem == True:
         ls = LancasterStemmer()
         model = load_alt_model()
@@ -184,6 +200,16 @@ def get_recs_from_wordvec(state, city, keyword, n_recs=3, topn=8000, stem=True):
             return location_filter2(tags, lookup_dict, state, city, n_recs)
         except KeyError:
             return
+
+def recs_from_wordvec_jn(model, state, city, keyword, n_recs=3, topn=8000):
+    """
+    takes in a word vec and returns top breweries from the provided location
+
+    """
+    ls = LancasterStemmer()
+    vec = model[ls.stem(keyword)]
+    tags = model.docvecs.most_similar([vec], topn=topn)
+    return location_filter2(tags, lookup_dict, state, city, n_recs)
 
 def user_recs(algo, reviews_df, uid):
     """
